@@ -107,6 +107,11 @@ class Config:
     schedule_enabled: bool = False            # 是否启用定时任务
     schedule_time: str = "18:00"              # 每日推送时间（HH:MM 格式）
     market_review_enabled: bool = True        # 是否启用大盘复盘
+
+    # === 收盘复盘配置 ===
+    market_schedule_enabled: bool = False     # 是否启用收盘定时复盘
+    market_schedule_time: str = "15:05"       # 收盘复盘时间（HH:MM 格式）
+    market_schedule_email_only: bool = True   # 收盘复盘是否仅发送邮件
     
     # === 流控配置（防封禁关键参数）===
     # Akshare 请求间隔范围（秒）
@@ -219,6 +224,9 @@ class Config:
             schedule_enabled=os.getenv('SCHEDULE_ENABLED', 'false').lower() == 'true',
             schedule_time=os.getenv('SCHEDULE_TIME', '18:00'),
             market_review_enabled=os.getenv('MARKET_REVIEW_ENABLED', 'true').lower() == 'true',
+            market_schedule_enabled=os.getenv('MARKET_SCHEDULE_ENABLED', 'false').lower() == 'true',
+            market_schedule_time=os.getenv('MARKET_SCHEDULE_TIME', '15:05'),
+            market_schedule_email_only=os.getenv('MARKET_SCHEDULE_EMAIL_ONLY', 'true').lower() == 'true',
             webui_enabled=os.getenv('WEBUI_ENABLED', 'false').lower() == 'true',
             webui_host=os.getenv('WEBUI_HOST', '127.0.0.1'),
             webui_port=int(os.getenv('WEBUI_PORT', '8000')),

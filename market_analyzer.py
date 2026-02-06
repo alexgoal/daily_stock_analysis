@@ -12,6 +12,7 @@
 
 import logging
 import time
+import random
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -109,31 +110,39 @@ class MarketAnalyzer:
         self.search_service = search_service
         self.analyzer = analyzer
         
+    def _random_delay(self, min_sec: float = 2.0, max_sec: float = 5.0):
+        """随机延迟，防止被限流"""
+        delay = random.uniform(min_sec, max_sec)
+        logger.debug(f"[大盘] 延迟 {delay:.1f} 秒...")
+        time.sleep(delay)
+
     def get_market_overview(self) -> MarketOverview:
         """
         获取市场概览数据
-        
+
         Returns:
             MarketOverview: 市场概览数据对象
         """
         today = datetime.now().strftime('%Y-%m-%d')
         overview = MarketOverview(date=today)
-        
+
         # 1. 获取主要指数行情
         overview.indices = self._get_main_indices()
-        
+        self._random_delay(2, 4)
+
         # 2. 获取涨跌统计
         self._get_market_statistics(overview)
-        
+        self._random_delay(2, 4)
+
         # 3. 获取板块涨跌榜
         self._get_sector_rankings(overview)
-        
+
         # 4. 获取北向资金（可选）
         # self._get_north_flow(overview)
-        
+
         return overview
 
-    def _call_akshare_with_retry(self, fn, name: str, attempts: int = 2):
+    def _call_akshare_with_retry(self, fn, name: str, attempts: int = 5):
         last_error: Optional[Exception] = None
         for attempt in range(1, attempts + 1):
             try:
@@ -142,7 +151,9 @@ class MarketAnalyzer:
                 last_error = e
                 logger.warning(f"[大盘] {name} 获取失败 (attempt {attempt}/{attempts}): {e}")
                 if attempt < attempts:
-                    time.sleep(min(2 ** attempt, 5))
+                    # 指数退避：3秒, 6秒, 12秒, 20秒
+                    delay = min(3 * (2 ** (attempt - 1)), 20)
+                    time.sleep(delay)
         logger.error(f"[大盘] {name} 最终失败: {last_error}")
         return None
     

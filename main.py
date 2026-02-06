@@ -50,6 +50,7 @@ from notification import NotificationService, NotificationChannel, send_daily_re
 from search_service import SearchService, SearchResponse
 from stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from market_analyzer import MarketAnalyzer
+from trading_days import is_trading_day
 
 # 配置日志格式
 LOG_FORMAT = '%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s'
@@ -725,7 +726,13 @@ def parse_arguments() -> argparse.Namespace:
         action='store_true',
         help='启动本地配置 WebUI'
     )
-    
+
+    parser.add_argument(
+        '--market-schedule',
+        action='store_true',
+        help='启用收盘定时复盘模式（交易日每天指定时间执行大盘分析并发送邮件）'
+    )
+
     return parser.parse_args()
 
 
@@ -778,6 +785,84 @@ def run_market_review(notifier: NotificationService, analyzer=None, search_servi
     except Exception as e:
         logger.error(f"大盘复盘分析失败: {e}")
     
+    return None
+
+
+def run_market_review_email_only(config: Config) -> Optional[str]:
+    """
+    执行大盘复盘分析并仅发送邮件
+
+    专门用于收盘定时复盘模式，只发送邮件到指定邮箱
+
+    Args:
+        config: 配置对象
+
+    Returns:
+        复盘报告文本
+    """
+    logger.info("开始执行收盘大盘复盘分析...")
+
+    try:
+        # 检查今天是否为交易日
+        if not is_trading_day():
+            logger.info("今天不是交易日，跳过大盘复盘")
+            return None
+
+        # 初始化通知服务（用于发送邮件）
+        notifier = NotificationService()
+
+        # 检查邮件配置
+        if not notifier._is_email_configured():
+            logger.error("邮件配置不完整，请检查 EMAIL_SENDER 和 EMAIL_PASSWORD 配置")
+            return None
+
+        # 初始化搜索服务和分析器（如果有配置）
+        search_service = None
+        analyzer = None
+
+        if config.bocha_api_keys or config.tavily_api_keys or config.serpapi_keys:
+            search_service = SearchService(
+                bocha_keys=config.bocha_api_keys,
+                tavily_keys=config.tavily_api_keys,
+                serpapi_keys=config.serpapi_keys
+            )
+
+        # 初始化分析器（支持 Gemini 和 OpenAI 兼容 API）
+        if config.gemini_api_key or config.openai_api_key:
+            analyzer = GeminiAnalyzer()
+
+        # 执行大盘复盘
+        market_analyzer = MarketAnalyzer(
+            search_service=search_service,
+            analyzer=analyzer
+        )
+
+        review_report = market_analyzer.run_daily_review()
+
+        if review_report:
+            # 保存报告到文件
+            date_str = datetime.now().strftime('%Y%m%d')
+            report_filename = f"market_review_{date_str}.md"
+            filepath = notifier.save_report_to_file(
+                f"# 🎯 大盘复盘\n\n{review_report}",
+                report_filename
+            )
+            logger.info(f"大盘复盘报告已保存: {filepath}")
+
+            # 仅发送邮件（不发送其他渠道）
+            report_content = f"🎯 大盘复盘\n\n{review_report}"
+            success = notifier.send_to_email(report_content)
+
+            if success:
+                logger.info("收盘复盘邮件发送成功")
+            else:
+                logger.warning("收盘复盘邮件发送失败")
+
+            return review_report
+
+    except Exception as e:
+        logger.error(f"收盘大盘复盘分析失败: {e}")
+
     return None
 
 
@@ -941,19 +1026,36 @@ def main() -> int:
         if args.schedule or config.schedule_enabled:
             logger.info("模式: 定时任务")
             logger.info(f"每日执行时间: {config.schedule_time}")
-            
+
             from scheduler import run_with_schedule
-            
+
             def scheduled_task():
                 run_full_analysis(config, args, stock_codes)
-            
+
             run_with_schedule(
                 task=scheduled_task,
                 schedule_time=config.schedule_time,
                 run_immediately=True  # 启动时先执行一次
             )
             return 0
-        
+
+        # 模式2.5: 收盘复盘定时任务模式
+        if args.market_schedule or config.market_schedule_enabled:
+            logger.info("模式: 收盘复盘定时任务")
+            logger.info(f"每日执行时间: {config.market_schedule_time}（仅交易日）")
+
+            from market_scheduler import run_market_schedule
+
+            def market_scheduled_task():
+                run_market_review_email_only(config)
+
+            run_market_schedule(
+                task=market_scheduled_task,
+                schedule_time=config.market_schedule_time,
+                run_immediately=True  # 启动时先执行一次（如果是交易日）
+            )
+            return 0
+
         # 模式3: 正常单次运行
         run_full_analysis(config, args, stock_codes)
         
