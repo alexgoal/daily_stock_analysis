@@ -28,7 +28,13 @@ if os.getenv("GITHUB_ACTIONS") != "true":
     # 本地开发环境，如需代理请取消注释或修改端口
     # os.environ["http_proxy"] = "http://127.0.0.1:10809"
     # os.environ["https_proxy"] = "http://127.0.0.1:10809"
-    pass
+
+    # 清除可能存在的代理设置，避免连接失败
+    # 如果需要使用代理，请注释掉下面两行
+    os.environ.pop("http_proxy", None)
+    os.environ.pop("https_proxy", None)
+    os.environ.pop("HTTP_PROXY", None)
+    os.environ.pop("HTTPS_PROXY", None)
 
 import argparse
 import logging

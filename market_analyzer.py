@@ -13,9 +13,20 @@
 import logging
 import time
 import random
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+
+# 禁用代理，避免 akshare/requests 使用系统代理
+# 如果需要使用代理，请注释掉下面几行
+os.environ.pop("http_proxy", None)
+os.environ.pop("https_proxy", None)
+os.environ.pop("HTTP_PROXY", None)
+os.environ.pop("HTTPS_PROXY", None)
+# 设置 NO_PROXY，告诉 requests 不要对这些域名使用代理
+os.environ["NO_PROXY"] = "*"
+os.environ["no_proxy"] = "*"
 
 import akshare as ak
 import pandas as pd
@@ -206,9 +217,9 @@ class MarketAnalyzer:
         """获取市场涨跌统计"""
         try:
             logger.info("[大盘] 获取市场涨跌统计...")
-            
-            # 获取全部A股实时行情
-            df = self._call_akshare_with_retry(ak.stock_zh_a_spot_em, "A股实时行情", attempts=2)
+
+            # 获取全部A股实时行情（使用腾讯接口，eastmoney 在某些网络下不稳定）
+            df = self._call_akshare_with_retry(ak.stock_zh_a_spot, "A股实时行情", attempts=2)
             
             if df is not None and not df.empty:
                 # 涨跌统计
@@ -237,38 +248,41 @@ class MarketAnalyzer:
             logger.error(f"[大盘] 获取涨跌统计失败: {e}")
     
     def _get_sector_rankings(self, overview: MarketOverview):
-        """获取板块涨跌榜"""
+        """获取板块涨跌榜（失败时跳过，不影响整体流程）"""
         try:
             logger.info("[大盘] 获取板块涨跌榜...")
-            
+
             # 获取行业板块行情
             df = self._call_akshare_with_retry(ak.stock_board_industry_name_em, "行业板块行情", attempts=2)
-            
+
             if df is not None and not df.empty:
                 change_col = '涨跌幅'
                 if change_col in df.columns:
                     df[change_col] = pd.to_numeric(df[change_col], errors='coerce')
                     df = df.dropna(subset=[change_col])
-                    
+
                     # 涨幅前5
                     top = df.nlargest(5, change_col)
                     overview.top_sectors = [
                         {'name': row['板块名称'], 'change_pct': row[change_col]}
                         for _, row in top.iterrows()
                     ]
-                    
+
                     # 跌幅前5
                     bottom = df.nsmallest(5, change_col)
                     overview.bottom_sectors = [
                         {'name': row['板块名称'], 'change_pct': row[change_col]}
                         for _, row in bottom.iterrows()
                     ]
-                    
+
                     logger.info(f"[大盘] 领涨板块: {[s['name'] for s in overview.top_sectors]}")
                     logger.info(f"[大盘] 领跌板块: {[s['name'] for s in overview.bottom_sectors]}")
-                    
+            else:
+                logger.warning("[大盘] 板块数据为空，跳过板块涨跌榜")
+
         except Exception as e:
-            logger.error(f"[大盘] 获取板块涨跌榜失败: {e}")
+            logger.warning(f"[大盘] 获取板块涨跌榜失败（跳过）: {str(e)[:100]}")
+            # 不抛出异常，允许程序继续运行
     
     # def _get_north_flow(self, overview: MarketOverview):
     #     """获取北向资金流入"""

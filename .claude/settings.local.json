@@ -6,7 +6,12 @@
       "Bash(source:*)",
       "Bash(pip install:*)",
       "Bash(ls:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(timeout 60 python:*)",
+      "Bash(timeout:*)",
+      "Bash(pkill:*)",
+      "Bash(tee:*)",
+      "Bash(NO_PROXY=\"*\" python:*)"
     ]
   }
 }
