@@ -51,7 +51,7 @@ class YfinanceFetcher(BaseFetcher):
     """
     
     name = "YfinanceFetcher"
-    priority = 4
+    priority = 5  # 最低优先级：... > Baostock(4) > Yfinance(5)
     
     def __init__(self):
         """初始化 YfinanceFetcher"""

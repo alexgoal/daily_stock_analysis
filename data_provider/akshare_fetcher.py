@@ -252,7 +252,7 @@ class AkshareFetcher(BaseFetcher):
     """
     
     name = "AkshareFetcher"
-    priority = 1
+    priority = 2  # 优先级：Qveris(0) > Efinance(1) > Akshare(2)
     
     def __init__(self, sleep_min: float = 2.0, sleep_max: float = 5.0):
         """

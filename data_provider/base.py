@@ -259,32 +259,52 @@ class DataFetcherManager:
     def _init_default_fetchers(self) -> None:
         """
         初始化默认数据源列表
-        
+
         按优先级排序：
-        0. EfinanceFetcher (Priority 0) - 最高优先级
-        1. AkshareFetcher (Priority 1)
-        2. TushareFetcher (Priority 2)
-        3. BaostockFetcher (Priority 3)
-        4. YfinanceFetcher (Priority 4)
+        0. QverisFetcher (Priority 0) - QVeris iFinD，稳定无需token
+        1. EfinanceFetcher (Priority 1)
+        2. AkshareFetcher (Priority 2)
+        3. TushareFetcher (Priority 3)
+        4. BaostockFetcher (Priority 4)
+        5. YfinanceFetcher (Priority 5)
         """
+        from .qveris_fetcher import QverisFetcher
         from .efinance_fetcher import EfinanceFetcher
         from .akshare_fetcher import AkshareFetcher
         from .tushare_fetcher import TushareFetcher
         from .baostock_fetcher import BaostockFetcher
         from .yfinance_fetcher import YfinanceFetcher
-        
-        self._fetchers = [
-            EfinanceFetcher(),   # 最高优先级
-            AkshareFetcher(),
-            TushareFetcher(),
-            BaostockFetcher(),
-            YfinanceFetcher(),
+
+        fetchers_to_add = [
+            QverisFetcher(),  # 最高优先级，iFinD稳定
         ]
-        
+
+        # 只有在 Qveris 不可用时才添加其他数据源
+        if not fetchers_to_add[0].is_available():
+            logger.info("[Qveris] API Key 未配置，使用备用数据源")
+            fetchers_to_add.extend([
+                EfinanceFetcher(),
+                AkshareFetcher(),
+                TushareFetcher(),
+                BaostockFetcher(),
+                YfinanceFetcher(),
+            ])
+        else:
+            # 即使 Qveris 可用，也添加 Efinance 和 Akshare 作为备用
+            fetchers_to_add.extend([
+                EfinanceFetcher(),
+                AkshareFetcher(),
+                TushareFetcher(),
+                BaostockFetcher(),
+                YfinanceFetcher(),
+            ])
+
+        self._fetchers = fetchers_to_add
+
         # 按优先级排序
         self._fetchers.sort(key=lambda f: f.priority)
-        
-        logger.info(f"已初始化 {len(self._fetchers)} 个数据源: " + 
+
+        logger.info(f"已初始化 {len(self._fetchers)} 个数据源: " +
                    ", ".join([f.name for f in self._fetchers]))
     
     def add_fetcher(self, fetcher: BaseFetcher) -> None:

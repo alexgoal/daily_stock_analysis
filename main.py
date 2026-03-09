@@ -141,17 +141,20 @@ class StockAnalysisPipeline:
     def __init__(
         self,
         config: Optional[Config] = None,
-        max_workers: Optional[int] = None
+        max_workers: Optional[int] = None,
+        fast_mode: bool = False
     ):
         """
         初始化调度器
-        
+
         Args:
             config: 配置对象（可选，默认使用全局配置）
             max_workers: 最大并发线程数（可选，默认从配置读取）
+            fast_mode: 快速模式，跳过新闻搜索
         """
         self.config = config or get_config()
         self.max_workers = max_workers or self.config.max_workers
+        self.fast_mode = fast_mode
         
         # 初始化各模块
         self.db = get_db()
@@ -288,14 +291,16 @@ class StockAnalysisPipeline:
             
             # Step 4: 多维度情报搜索（最新消息+风险排查+业绩预期）
             news_context = None
-            if self.search_service.is_available:
+            if self.fast_mode:
+                logger.info(f"[{code}] 快速模式：跳过新闻搜索")
+            elif self.search_service.is_available:
                 logger.info(f"[{code}] 开始多维度情报搜索...")
-                
-                # 使用多维度搜索（最多3次搜索）
+
+                # 使用多维度搜索（最多1次搜索 - 快速模式）
                 intel_results = self.search_service.search_comprehensive_intel(
                     stock_code=code,
                     stock_name=stock_name,
-                    max_searches=3
+                    max_searches=1  # 减少到1次搜索，大幅提速
                 )
                 
                 # 格式化情报报告
@@ -663,6 +668,7 @@ def parse_arguments() -> argparse.Namespace:
 示例:
   python main.py                    # 正常运行
   python main.py --debug            # 调试模式
+  python main.py --fast             # 快速模式：跳过新闻搜索
   python main.py --dry-run          # 仅获取数据，不进行 AI 分析
   python main.py --stocks 600519,000001  # 指定分析特定股票
   python main.py --no-notify        # 不发送推送通知
@@ -726,7 +732,13 @@ def parse_arguments() -> argparse.Namespace:
         action='store_true',
         help='跳过大盘复盘分析'
     )
-    
+
+    parser.add_argument(
+        '--fast',
+        action='store_true',
+        help='快速模式：跳过新闻搜索，仅基于技术数据分析'
+    )
+
     parser.add_argument(
         '--webui',
         action='store_true',
@@ -890,7 +902,8 @@ def run_full_analysis(
         # 创建调度器
         pipeline = StockAnalysisPipeline(
             config=config,
-            max_workers=args.workers
+            max_workers=args.workers,
+            fast_mode=getattr(args, 'fast', False)
         )
         
         # 1. 运行个股分析
